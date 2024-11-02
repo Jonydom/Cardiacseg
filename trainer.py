@@ -17,9 +17,9 @@ from loss import LossFunction
 scaler = torch.cuda.amp.GradScaler()
 
 
-def training(model, train_loader, val_loader, optimizer, lr_scheduler, device, args):
+def training(model, train_loader, val_loader, optimizer, lr_scheduler, args):
     loss_function = LossFunction(args)
-    loss_weights = [args.lossw_dice, args.lossw_ce, args.lossw_rmi]
+    # loss_weights = [args.lossw_dice, args.lossw_ce, args.lossw_rmi]
     metric = DiceMetric(include_background=False, reduction="mean")
     
     post_pred = Compose([EnsureType(), AsDiscrete(argmax=True, to_onehot=args.num_classes)])
@@ -27,7 +27,6 @@ def training(model, train_loader, val_loader, optimizer, lr_scheduler, device, a
     
     best_metric = -1
     best_metric_epoch = -1
-    epoch_loss_values = []
     dice_metrics = []
     writer = SummaryWriter(args.output_dir)
     
@@ -40,47 +39,40 @@ def training(model, train_loader, val_loader, optimizer, lr_scheduler, device, a
         print(f"epoch {epoch + 1}/{args.epoch_end}")
         
         model.train()
-        epoch_loss, epoch_dc_loss, epoch_ce_loss, epoch_rmi_loss = 0, 0, 0, 0
+        epoch_loss, loss_values = 0, []
         
         step = 0
         for batch_data in train_loader:
             step += 1
-            loss, loss_list = train_step(model, optimizer, batch_data, epoch, step, loss_function, loss_weights, demo_dir, device, args)
+            loss, loss_list = train_step(model, optimizer, batch_data, epoch, step, loss_function, demo_dir, args)
             epoch_loss += loss.item()
-            epoch_dc_loss += loss_list[0].item()
-            epoch_ce_loss += loss_list[1].item()
-            epoch_rmi_loss += loss_list[2].item()
-#             if args.local_rank == 0:
-            print(
-                    f"{step}/{len(train_loader)}"
-                    f", epoch_loss: {loss.item():.4f}"
-                    f", dice_loss: {loss_list[0].item():.4f}"
-                    f", ce_loss: {loss_list[1].item():.4f}"
-                    f", rmi_loss: {loss_list[2].item():.4f}"
-                )
+            loss_values.append(loss_list)
+            # epoch_dc_loss += loss_list[0].item()
+            # epoch_ce_loss += loss_list[1].item()
+            # epoch_rmi_loss += loss_list[2].item()
+            batch_str = f"{step}/{len(train_loader)}, epoch_loss: {loss.item():.4f}"
+            for idx, loss_name in enumerate(args.loss):
+                batch_str += f", {loss_name}_loss: {loss_list[idx].item():.4f}"
+            print(batch_str)
 
         lr_scheduler.step()
         epoch_loss /= step
-        epoch_dc_loss /= step
-        epoch_ce_loss /= step
-        epoch_rmi_loss /= step
-        epoch_loss_values.append([epoch_loss, epoch_dc_loss, epoch_ce_loss, epoch_rmi_loss])
+        # avg_losses = np.mean(loss_values, axis=0)
+        all_losses = torch.tensor(loss_values)
+        avg_losses = torch.mean(all_losses, dim=0)
+
+        epoch_str = f"epoch {epoch + 1} average loss: {epoch_loss:.4f}"
 
         writer.add_scalar("train_loss", epoch_loss, epoch)
-        writer.add_scalar("train_dc_loss", epoch_dc_loss, epoch)
-        writer.add_scalar("train_ce_loss", epoch_ce_loss, epoch)
-        writer.add_scalar("train_rmi_loss", epoch_rmi_loss, epoch)
         writer.add_scalar("learning_rate", optimizer.param_groups[0]['lr'], epoch)
+        for idx, loss_name in enumerate(args.loss):
+            writer.add_scalar(f"train_{loss_name}_loss", avg_losses[idx].item(), epoch)
+            epoch_str += f", current train {loss_name}: {avg_losses[idx].item():.4f}"
 
-        print(f"epoch {epoch + 1} average loss: {epoch_loss:.4f}")
-        print(
-                f"current epoch: {epoch + 1}, current train dice: {epoch_dc_loss:.4f}, "
-                f"current train ce: {epoch_ce_loss:.4f}, current train rmi: {epoch_rmi_loss:.4f}"
-            )
+        print(epoch_str)
 
         if (epoch + 1) % args.val_interval == 0:
-            dice_wo_bg = valid_step(model, val_loader, post_pred, post_label, metric, device, args)
-            dice_metrics.append(dice_wo_bg)
+            dice_wo_bg = valid_step(model, val_loader, post_pred, post_label, metric, args)
             writer.add_scalar("valid_dice", dice_wo_bg, epoch)
 
             if dice_wo_bg > best_metric:
@@ -92,13 +84,14 @@ def training(model, train_loader, val_loader, optimizer, lr_scheduler, device, a
                             'optimizer':        optimizer.state_dict(),
                             'scheduler':        lr_scheduler.state_dict()
                         }
-            torch.save(
-                        checkpoint,
-                        os.path.join(
-                                        args.output_dir, 
-                                        f"metric_model-epoch{epoch + 1}-dice{dice_wo_bg}.pth"
-                                    )
-                    )
+            checkpoint_path = os.path.join(args.output_dir, f"metric_model-epoch{epoch + 1}-dice{dice_wo_bg}.pth")
+            torch.save(checkpoint, checkpoint_path)
+
+            dice_metrics.append((dice_wo_bg, checkpoint_path))
+            dice_metrics = sorted(dice_metrics, key=lambda x: x[0], reverse=True)
+            for _, path in dice_metrics[5:]:
+                if os.path.isfile(path):
+                    os.remove(path)
             
             print(
                     f"current valid dice without background: {dice_wo_bg:.4f}"
@@ -108,18 +101,18 @@ def training(model, train_loader, val_loader, optimizer, lr_scheduler, device, a
     return
 
 
-def train_step(model, optimizer, batch_data, epoch, step, loss_function, loss_weights, demo_dir, device, args):
+def train_step(model, optimizer, batch_data, epoch, step, loss_function, demo_dir, args):
     inputs, labels = (
-        batch_data["image"].to(device),
-        batch_data["label"].to(device),
+        batch_data["image"].cuda(),
+        batch_data["label"].cuda(),
     )
     optimizer.zero_grad()
     with torch.cuda.amp.autocast():
         outputs = model(inputs)
-        loss_list = loss_function(outputs, labels, epoch)
-    loss = 0
-    for i in range(len(loss_list)):
-        loss += loss_list[i] * loss_weights[i]
+        loss, loss_list = loss_function(outputs, labels, epoch)
+    # loss = 0
+    # for i in range(len(loss_list)):
+    #     loss += loss_list[i] * loss_weights[i]
 
     scaler.scale(loss).backward()
     scaler.step(optimizer)
@@ -132,13 +125,13 @@ def train_step(model, optimizer, batch_data, epoch, step, loss_function, loss_we
 
 
 
-def valid_step(model, val_loader, post_pred, post_label, metric, device, args):
+def valid_step(model, val_loader, post_pred, post_label, metric, args):
     model.eval()
     with torch.no_grad():
         for val_data in val_loader:
             val_inputs, val_labels = (
-                val_data["image"].to(device),
-                val_data["label"].to(device),
+                val_data["image"].cuda(),
+                val_data["label"].cuda(),
             )
 
             roi_size = args.image_size

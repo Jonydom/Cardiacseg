@@ -7,7 +7,7 @@ from monai.networks.blocks.dynunet_block import UnetOutBlock
 from monai.networks.blocks.unetr_block import UnetrBasicBlock, UnetrUpBlock
 from monai.utils import ensure_tuple_rep
 
-import models_3dvit
+from networks import models_3dvit
 
 
 class CardiacSeg(nn.Module):

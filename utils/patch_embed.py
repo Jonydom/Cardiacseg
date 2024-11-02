@@ -9,9 +9,9 @@ Hacked together by / Copyright 2020 Ross Wightman
 import sys
 from torch import nn as nn
 
-sys.path.insert(0, '/tmp/code/cardiacseg/utils/')
-from helpers import to_3tuple
-from trace_utils import _assert
+sys.path.insert(0, '/home/jianglei/VCL-Project/data/2022Jianglei/CardiacSeg/utils/')
+from utils.helpers import to_3tuple
+from utils.trace_utils import _assert
 
 
 class PatchEmbed(nn.Module):

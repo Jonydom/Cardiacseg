@@ -30,24 +30,13 @@ from monai.transforms import (
 from monai.data import CacheDataset, DataLoader, decollate_batch
 from monai.networks.layers import Norm
 from monai.inferers import sliding_window_inference
-sys.path.insert(0, '/tmp/code/cardiacseg/networks')
+sys.path.insert(0, '/home/jianglei/VCL-Project/data/2022Jianglei/CardiacSeg/networks')
 from cardiacseg import CardiacSeg
+from models import choose_model
 
 
 def load_model(args, device, model_path):
-    model = CardiacSeg(
-                        in_channels = 1,
-                        out_channels = args.num_classes,
-                        img_size = args.image_size,
-                        feature_size = 16,    ####
-                        hidden_size = 768,
-                        mlp_dim = 3072,
-                        num_heads = 12,
-                        norm_name = "batch",
-                        res_block = True,
-                        dropout_rate = 0.0,
-                        args = args
-                    )
+    model = choose_model(args)
     model = torch.nn.DataParallel(model).to(device)
     checkpoint = torch.load(model_path)
     model.load_state_dict(checkpoint['model_state_dict'], strict=False)
@@ -71,8 +60,8 @@ test_transform = Compose(
 
 
 def inference(args, test_dir, model, output_dir):
-    test_images = sorted(glob.glob(f'{test_dir}/*_image.nii.gz'))
-    test_files = [{"image": image_name} for image_name in test_images][:2]
+    test_images = sorted(glob.glob(f'{test_dir}/*image.nii.gz'))
+    test_files = [{"image": image_name} for image_name in test_images]
     print('Number of cases:', len(test_files))
 
     # test_files
@@ -123,11 +112,15 @@ if __name__ == "__main__":
     import argparse
     parser = argparse.ArgumentParser()
     parser.add_argument("--num_classes", default=8, type=int, help="number of segmentation classes, including background")
-    parser.add_argument("--ckpt_url", default='/tmp/pretrainmodel/CardiacSeg_model_o5l2/CardiacSeg_CT_model.pth', type=str, help="Optional input file, read from stdin if not given", nargs="?")
-    parser.add_argument("--in_file", default='/tmp/dataset/CHD_Seg/test/images', help="Optional input file, read from stdin if not given", nargs="?")
-    parser.add_argument("--out_file", default='/tmp/output', help="Optional output file, write to stdout if not given", nargs="?")
+    parser.add_argument("--ckpt_url", default='/home/jianglei/VCL-Project/data/2022Jianglei/CardiacSeg/output-sdf-b1in-cardiacseg/metric_model-epoch490-dice0.8008242249488831.pth', type=str, help="Optional input file, read from stdin if not given", nargs="?")
+    parser.add_argument("--in_file", default='/home/jianglei/VCL-Project/data/2022Jianglei/dataset/ImageCHD_split_sdf/test/images', help="Optional input file, read from stdin if not given", nargs="?")
+    parser.add_argument("--out_file", default='/home/jianglei/VCL-Project/data/2022Jianglei/CardiacSeg/output-sdf-b1in-cardiacseg/output', help="Optional output file, write to stdout if not given", nargs="?")
     parser.add_argument("--arch", default="vit_base", type=str)
     parser.add_argument("--finetune", action="store_true", help="finetune a pretrained model, else train from scratch")
+    
+    parser.add_argument("--model_name", default='cardiacseg', type=str, help="network used for segmrntation")
+    parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
+    parser.add_argument("--norm", default='instance', type=str, help="network used for segmrntation")
     args = parser.parse_args()
 
     args.image_size = (128, 128, 128)

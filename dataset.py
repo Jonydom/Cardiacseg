@@ -101,15 +101,15 @@ def get_data(args):
             train_images = sorted(glob.glob(f'{args.data_dir}/train/images/*image.nii.gz'))
             train_labels = sorted(glob.glob(f'{args.data_dir}/train/labels/*label.nii.gz'))
             
-        val_images = sorted(glob.glob(f'{args.data_dir}/valid/images/*image.nii.gz'))
-        val_labels = sorted(glob.glob(f'{args.data_dir}/valid/labels/*label.nii.gz'))
+        val_images = sorted(glob.glob(f'{args.data_dir}/test/images/*image.nii.gz'))
+        val_labels = sorted(glob.glob(f'{args.data_dir}/test/labels/*label.nii.gz'))
         
     elif args.dataset == 'lymph':
         assert args.num_classes == 8
         train_images = sorted(glob.glob(f'{args.data_dir}/train/images/*.nii.gz'))
         train_labels = sorted(glob.glob(f'{args.data_dir}/train/labels/*.nii.gz'))
-        val_images = sorted(glob.glob(f'{args.data_dir}/valid/images/*.nii.gz'))
-        val_labels = sorted(glob.glob(f'{args.data_dir}/valid/labels/*.nii.gz'))
+        val_images = sorted(glob.glob(f'{args.data_dir}/test/images/*.nii.gz'))
+        val_labels = sorted(glob.glob(f'{args.data_dir}/test/labels/*.nii.gz'))
     
     elif 'mmwhs' in args.dataset:
         assert args.num_classes == 8
@@ -182,6 +182,7 @@ def get_transforms(args):
     common_transform2 = [
                             CropForegroundd(keys=["image", "label"], source_key="image"),
                         ]
+    # 训练集特有
     common_transform3 = [
                             RandCropByPosNegLabeld(
                                                         keys=["image", "label"],
@@ -202,7 +203,7 @@ def get_transforms(args):
                         ]
                         
 
-    if 'chdseg' in args.dataset:
+    if 'imagechd' in args.dataset:
         intensity_transform = [
                                     ScaleIntensityRanged(
                                                             keys=["image"], a_min=args.a_min, a_max=args.a_max,
@@ -213,39 +214,6 @@ def get_transforms(args):
                                 CHD2CHD(),
                                 EnsureTyped(keys=["image", "label"]),
                             ]
-        
-    elif args.dataset == 'lymph':
-        intensity_transform = [
-                                    ScaleIntensityRanged(
-                                                            keys=["image"], a_min=args.a_min, a_max=args.a_max,
-                                                            b_min=0.0, b_max=1.0, clip=True,
-                                                        ),
-                              ]
-        label_transform = [
-                                Lymph2CHD(),
-                                EnsureTyped(keys=["image", "label"]),
-                            ]
-        
-    elif args.dataset == 'mmwhs_mri':
-        intensity_transform = [
-                                    ScaleIntensityRangePercentilesd(
-                                                    keys=["image"], lower=0, upper=98,
-                                                    b_min=0.0, b_max=1.0, clip=True, relative=False
-                                                ),
-                              ]
-        label_transform = [
-                                MMWHS2CHD(),
-                                EnsureTyped(keys=["image", "label"]),
-                            ]
-        
-    elif args.dataset == 'msd':
-        intensity_transform = [
-                                    ScaleIntensityRangePercentilesd(
-                                                    keys=["image"], lower=0, upper=98,
-                                                    b_min=0.0, b_max=1.0, clip=True, relative=False
-                                                ),
-                              ]
-        label_transform = [EnsureTyped(keys=["image", "label"]),]
         
     train_transform = Compose(common_transform1 + intensity_transform + common_transform2 + common_transform3 
                                 + enhance_transform + label_transform)
