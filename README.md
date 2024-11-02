@@ -21,3 +21,4 @@ sh scripts/train_imagechd.sh
 python inference.py --ckpt_url {model_path} --in_file {data_path} --out_file {output_path}
 ```
 Our CardiacSeg model trained on the ImageCHD dataset can be downloaded [here](https://openi.pcl.ac.cn/OpenMedIA/CardiacSeg/modelmanage/model_filelist_tmpl?name=CardiacSeg_model_o5l2).
+
