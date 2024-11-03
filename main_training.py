@@ -25,19 +25,19 @@ def parse_args():
     parser.add_argument("--a_max", default=2000.0, type=float, help="a_max in ScaleIntensityRanged")
     parser.add_argument("--batch_size", default=2, type=int, help="number of batch size")
     parser.add_argument("--cache_rate", default=1.0, type=float, help="ceche rate in CacheDataset")
-    parser.add_argument("--dataset", default="chdseg", type=str, help="dataset")
-    parser.add_argument("--data_dir", default="", type=str, help="dataset directory")
+    parser.add_argument("--dataset", default="imagechd", type=str, help="dataset")
+    parser.add_argument("--data_dir", default="/root/autodl-tmp/ImageCHD_split_sdf", type=str, help="dataset directory")
     parser.add_argument("--demo_interval", default=30, type=int, help="the interval for plotting demo")
-    parser.add_argument("--epoch_end", default=300, type=int, help="the end epoch of training")
+    parser.add_argument("--epoch_end", default=500, type=int, help="the end epoch of training")
     parser.add_argument("--epoch_start", default=0, type=int, help="the start epoch of training")
     parser.add_argument("--fold", default=None, type=int, help="the fold of 5-fold validation")
-    parser.add_argument("--gpu", default="0,1", type=str, help="gpu id")
-    parser.add_argument("--n_gpu", default=2, type=int, help="the number of gpu")
+    parser.add_argument("--gpu", default="0", type=str, help="gpu id")
+    parser.add_argument("--n_gpu", default=1, type=int, help="the number of gpu")
 
     parser.add_argument("--input_size", default=96, type=int, help="image size for network input")
     parser.add_argument("--in_channels", default=1, type=int, help="number of input channels")
-    parser.add_argument("--lr", default=1e-3, type=float, help="learning rate")
-    parser.add_argument("--lr_decay_epoch", default=250, type=int, help="epoch learning rate decay")
+    parser.add_argument("--lr", default=1e-4, type=float, help="learning rate")
+    parser.add_argument("--lr_decay_epoch", default=450, type=int, help="epoch learning rate decay")
     #### loss ####
     parser.add_argument("--loss", nargs='+', default=["dice", "ce", "rmi"], type=str, help="loss function to use")
     parser.add_argument("--lossw_dice", default=1.0, type=float, help="weight for dice loss")
@@ -45,18 +45,18 @@ def parse_args():
     parser.add_argument("--lossw_rmi", default=0.1, type=float, help="weight for rmi loss")
     parser.add_argument("--sigmoid_rmi", action="store_true", help="adding rmi loss in sigmoid manner")
     parser.add_argument("--rmi_ds", default='avg', type=str, help="downsampling method for rmi loss")
-    parser.add_argument("--rmi_epoch", default=250, type=int, help="the epoch rmi loss adds")
+    parser.add_argument("--rmi_epoch", default=450, type=int, help="the epoch rmi loss adds")
     parser.add_argument("--rmi_stride", default=2, type=int, help="downsampling stride for rmi loss")
     parser.add_argument("--rmi_radius", default=3, type=int, help="radius for rmi loss")
 
     parser.add_argument('--local_rank', default=-1, type=int, help="node rank for distributed training")
-    parser.add_argument("--model_name", default='', type=str, help="network used for segmrntation")
+    parser.add_argument("--model_name", default='cardiacseg', type=str, help="network used for segmrntation")
     parser.add_argument("--norm", default='batch', type=str, help="network used for segmrntation")
     parser.add_argument("--num_pos", default=1, type=int, help="number of positive samples for RandCropByPosNegLabeld")
     parser.add_argument("--num_neg", default=3, type=int, help="number of negative samples for RandCropByPosNegLabeld")
     parser.add_argument("--num_samples", default=4, type=int, help="number of samples for RandCropByPosNegLabeld")
     parser.add_argument("--num_classes", default=7+1, type=int, help="number of segmentation classes, including background")
-    parser.add_argument("--output_dir", default="", type=str, help="directory to save the outputs")
+    parser.add_argument("--output_dir", default="/root/autodl-tmp/output/sdf-b2bn-cardiacseg", type=str, help="directory to save the outputs")
     parser.add_argument("--plot_col", default=8, type=int, help="number of columns in demo")
     parser.add_argument("--plot_row", default=4, type=int, help="number of rows in demo")
     parser.add_argument("--plot_slices", default=3, type=int, help="number of slice interval in demo")
@@ -69,7 +69,7 @@ def parse_args():
     parser.add_argument("--sw_batch_size", default=4, type=int, help="number of sliding window batch size")
     parser.add_argument("--val_interval", default=10, type=int, help="number of intervals to validate and save models")
     parser.add_argument("--warm_up", default=20, type=int, help="warm up epochs")
-    parser.add_argument("--workers", default=16, type=int, help="number of workers")
+    parser.add_argument("--workers", default=4, type=int, help="number of workers")
     
     return parser.parse_args()
 
@@ -87,6 +87,8 @@ def main():
     model = choose_model(args)
     if args.n_gpu > 1:
         model = torch.nn.DataParallel(model).cuda()
+    elif args.n_gpu == 1:
+        model = model.cuda()
     
     if args.finetune:
         checkpoint = torch.load(args.pretrained_model, map_location='cpu')
